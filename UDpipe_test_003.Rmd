@@ -1,0 +1,85 @@
+---
+title: "Multilanguage annotation with UDpipe"
+subtitle: "Parsing time"
+author: "Claude Grasland"
+output: html_notebook
+---
+
+## Introduction
+
+The aim of this short note is to test the time of parsing
+
+
+
+## Install the package
+
+Contrary to Spacyr, phe R package UDpipe does not implies a connection with Python and can work directly after installation.
+
+```{r}
+#install.package(udpipe)
+library(udpipe)
+library(knitr)
+library(data.table)
+```
+
+
+## Load dataset
+
+
+Our test data sample is a set of 781131 news published by four daily newspaper  mid 2013 and mid 2020 where at least one country or one world region has been detected by a preliminary research.
+
+
+```{r}
+test<-readRDS("UDpipe/dt_fr_geo_test.RDS")
+kable(head(test))
+
+```
+
+## fusion of title and description
+
+We create a column of text called "news" where we add Title and description
+
+```{r}
+test$news <- paste(test$title, test$text, sep=". ")
+kable(test$news[1])
+head(test$news)
+```
+
+
+
+## Parse text with universal dependencies
+
+
+
+## Load french parsing model
+
+we load the default french parsing model
+
+```{r}
+sel<-test[test$lang=="fr",]
+dl <- udpipe_download_model(language="french")
+ud_model_fr<-udpipe_load_model(file=dl$file)
+```
+
+## Parse
+
+## Test on 2013-2014 (132201 news)
+
+
+```{r}
+sel<-test[test$date<as.Date("2015-01-01"),]
+t1<-Sys.time()
+k<-dim(test)[1]
+sel<-test[1:k,]
+meta<-data.frame(doc_id=sel$id,source=sel$source,date=sel$date,tags=sel$tags)
+res<-udpipe_annotate(ud_model_fr, x=sel$news,doc_id=sel$id )
+res<-as.data.frame(res)[,c(1,3,5:8,10:12)]
+res<-merge(meta,res,all.x=F,all.y=T,by="doc_id")
+t2<-Sys.time()
+
+paste("Job done in ",t2-t1)
+
+
+saveRDS(res,"UDpipe/France_2013_2014_parsed")
+```
+

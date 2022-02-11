@@ -1,0 +1,88 @@
+---
+title: "UDpipe test"
+output: html_notebook
+---
+
+```{r}
+library(udpipe)
+library(dplyr)
+library(data.table)
+library(knitr)
+
+```
+
+
+# Prepare data
+
+We have prepared a sample of news published in 2019 by different newspapers. We have randomly selected for each newspapers a sample of 1000 news containing at least a country (name or capital city) or a world region (based on our dictionary). We start by working on the french corpus of 1000 news from Figaro and 1000 news from Le Monde. 
+
+```{r}
+corpus<-readRDS("UDpipe/samp2019.RDS")
+corpus$lang<-substr(corpus$source,1,2)
+corpus$num<-row.names(corpus)
+corpus$id<-paste(corpus$source,corpus$date,corpus$num,sep="_")
+corpus_fr<-corpus %>% filter(lang=="fr")
+```
+
+
+
+# Annotate
+
+## Download the french language model
+
+```{r}
+dl <- udpipe_download_model(language="french")
+str(dl)
+```
+
+## Load the french model for use
+
+```{r}
+ud_model_fr<-udpipe_load_model(file=dl$file)
+```
+
+## Annotate the text
+
+
+### French Trial
+
+**Warning** : it is important to convert the text in "UTF-8" before to run the model. It can produce errors if it is not the case.
+
+
+```{r}
+txt<-c("L'Europe ne se fera pas d'un coup.", 
+       "La Russie menace l'Europe de représailles.",
+       "L'Europe est menacée par la Russie.",
+       "Le conflit se passe en Europe.",
+       "Il faut se battre pour l'Europe.",
+       "Macron déclare que c'est une victoire de l'Europe.")
+txt<-iconv(txt, to="UTF-8")
+res<-udpipe_annotate(ud_model_fr, x=txt )
+
+y<-as.data.table(res)
+y[,-c(1:4,9:10,13:14)]
+```
+
+### French corpus
+
+We check the time necessary fo the processing of 2000 sentences (titles of news)
+
+```{r}
+txt<-corpus_fr$text
+t1<-Sys.time()
+
+#txt<-iconv(txt, to="UTF-8")
+res<-udpipe_annotate(ud_model_fr, x=txt,doc_id =corpus_fr$id)
+t2<-Sys.time()
+paste("Job done in",t2-t1)
+y<-as.data.table(res)
+y<-y[,-c(2:4,9:10,13:14)]
+
+
+```
+
+The time is equal to 13 seconds which mean approx. 6 to 7 seconds / 1000 news or one minute for 10000 news which is reasonable. 
+
+
+
+

@@ -1,0 +1,168 @@
+---
+title: "Multilanguage annotation with UDpipe"
+subtitle: "Test in five language"
+author: "Claude Grasland"
+output: html_notebook
+---
+
+## Introduction
+
+The aim of this short note is to test the possibility to annotate news in the five languages of the IMAGEUN project. As Spacy did not cover all the languages of interest, we try here to use the software UDpipe, developped by czech researchers for use in Python, but also available in R, thanks to the package developped by a belgium team.
+
+
+
+We would like to examine to what extent we obtain the same grammatical scheme in the different languages and if it makes sense or not to proceed to a multilanguage analysis wit UDpipe.
+
+## The UDpipe software
+
+### The initial software
+
+UDpipe is a Python prototype, capable of performing tagging, lemmatization and syntactic analysis of CoNLL-U input. It has been developped by three czech researchers (Milan Straka, Jana Straková, Jan Hajič) from the Institute of Formal and Applied Linguistics at Charles University in Prag. 
+
+https://ufal.mff.cuni.cz/udpipe/2
+
+
+- Milan Straka (2018): UDPipe 2.0 Prototype at CoNLL 2018 UD Shared Task. In: Proceedings of CoNLL 2018: The SIGNLL Conference on Computational Natural Language Learning, pp. 197-207, Association for Computational Linguistics, Stroudsburg, PA, USA, ISBN 978-1-948087-72-8
+- Milan Straka, Jana Straková, Jan Hajič (2019): UDPipe at SIGMORPHON 2019: Contextualized Embeddings, Regularization with Morphological Categories, Corpora Merging. In: Proceedings of the 16th SIGMORPHON Workshop on Computational Research in Phonetics, Phonology, and Morphology, pp. 95-103, Association for Computational Linguistics, Stroudsburg, PA, USA, ISBN 978-1-950737-36-9
+- Milan Straka, Jana Straková, Jan Hajič (2019): Evaluating Contextualized Embeddings on 54 Languages in POS Tagging, Lemmatization and Dependency Parsing. In: ArXiv.org Computing Research Repository, ISSN 2331-8422, 1904.02099
+
+The Universal Dependencies 2.6 models contain 99 models of 63 languages, each consisting of a tokenizer, tagger, lemmatizer and dependency parser, all trained using the UD data. The list of language and models available is presented in the following page : 
+
+https://ufal.mff.cuni.cz/udpipe/2/models
+
+
+
+### The R package 
+
+The R package UDpipe has been realized by the belgium company [BNOSAC](http://www.bnosac.be/index.php) which declares to *provides expertise in statistical modelling, data science, text mining, web scraping, biostatistics, statistical web development and integration services regarding data analytics. It supports all facets of the usage of data analytics at the enterprise. From adhoc analysis to tailor made & integrated solutions. We help set up the best working conditions for data scientists, get them up to speed with training and provide solutions to speed up deployment.* 
+
+BNOSCA has build a specific website for the realisation of NLP in R with UDpipe, available at this URL : 
+
+https://bnosac.github.io/udpipe/en/index.html
+
+A complete documentation of the package is presentedin the following document 
+https://cran.r-project.org/web/packages/udpipe/udpipe.pdf
+
+### Install the package
+
+Contrary to Spacyr, phe R package UDpipe does not implies a connection with Python and can work directly after installation.
+
+```{r}
+#install.package(udpipe)
+library(udpipe)
+```
+
+
+## Test dataset
+
+
+Our test dataset is based on a selection of 5 news where the word "Europe" is used in different grammatical contexts (subject, object, ...). The 5 news collected in fench language has been translated in english, german and turkish  with Google translate.
+
+
+```{r}
+test<-read.table("UDpipe/test_lang.csv", header=T, encoding = "UTF-8",sep=";")
+kable(test)
+```
+
+## Parse text with universal dependencies
+
+One difficulty for non specialist is the fact that different models are available for the same language and it is difficult to anticipate which one will be the best for our purpose. For the momen, we decide to use the default model in each language.
+
+### French 
+
+```{r}
+sel<-test[test$lang=="fr",]
+dl <- udpipe_download_model(language="french")
+ud_model_fr<-udpipe_load_model(file=dl$file)
+res<-udpipe_annotate(ud_model_fr, x=sel$text,doc_id=sel$iden )
+parse_fr<-as.data.table(res)
+```
+### English
+
+```{r}
+sel<-test[test$lang=="en",]
+dl <- udpipe_download_model(language="english")
+ud_model_en<-udpipe_load_model(file=dl$file)
+res<-udpipe_annotate(ud_model_en, x=sel$text,doc_id=sel$iden )
+parse_en<-as.data.table(res)
+```
+
+### German
+
+```{r}
+sel<-test[test$lang=="de",]
+dl <- udpipe_download_model(language="german")
+ud_model_de<-udpipe_load_model(file=dl$file)
+res<-udpipe_annotate(ud_model_de, x=sel$text,doc_id=sel$iden )
+parse_de<-as.data.table(res)
+```
+### Turkish
+
+```{r}
+sel<-test[test$lang=="tr",]
+dl <- udpipe_download_model(language="turkish")
+ud_model_tr<-udpipe_load_model(file=dl$file)
+res<-udpipe_annotate(ud_model_tr, x=sel$text,doc_id=sel$iden )
+parse_tr<-as.data.table(res)
+```
+
+### Cross linguistic result
+
+```{r}
+parse_fr$lang="fr"
+parse_en$lang="en"
+parse_de$lang="de"
+parse_tr$lang="tr"
+parse_tot<-rbind(parse_fr,parse_en,parse_de,parse_tr)
+parse_tot<-parse_tot[,c(1,15,5:14)]
+```
+
+
+## Compare dependency trees
+
+
+### Visualization function
+
+This function was published recently on R-Bloggers by "Super User" (https://www.r-bloggers.com/2019/07/dependency-parsing-with-udpipe/)
+
+```{r}
+library(igraph)
+library(ggraph)
+library(ggplot2)
+plot_annotation <- function(x, size = 3,mytitle="updipe output"){
+  stopifnot(is.data.frame(x) & all(c("doc_id", "token_id", "head_token_id", "dep_rel",
+                                     "token_id", "token", "lemma", "upos", "xpos", "feats") %in% colnames(x)))
+  x <- x[!is.na(x$head_token_id), ]
+  x <- x[x$doc_id %in% min(x$doc_id), ]
+  edges <- x[x$head_token_id != 0, c("token_id", "head_token_id", "dep_rel")]
+  edges$label <- edges$dep_rel
+  g <- graph_from_data_frame(edges,
+                             vertices = x[, c("token_id", "token", "lemma", "upos", "xpos", "feats")],
+                             directed = TRUE)
+  ggraph(g, layout = "linear") +
+    geom_edge_arc(ggplot2::aes(label = dep_rel, vjust = -0.20),
+                  arrow = grid::arrow(length = unit(4, 'mm'), ends = "last", type = "closed"),
+                  end_cap = ggraph::label_rect("wordswordswords"),
+                  label_colour = "red", check_overlap = TRUE, label_size = size) +
+    geom_node_label(ggplot2::aes(label = token), col = "darkgreen", size = size, fontface = "bold") +
+    geom_node_text(ggplot2::aes(label = upos), nudge_y = -0.35, size = size) +
+    theme_graph(base_family = "Arial Narrow") +
+    labs(title = mytitle, subtitle = "tokenisation, parts of speech tagging & dependency relations")
+}
+```
+
+### Analysis of sentence 2
+
+
+
+```{r}
+x <- as.data.frame(parse_tot[parse_tot$doc_id==2 & parse_tot$lang=="fr",])
+plot_annotation(x, size = 3, mytitle="French")
+x <- as.data.frame(parse_tot[parse_tot$doc_id==2 & parse_tot$lang=="en",])
+plot_annotation(x, size = 3, mytitle="English")
+x <- as.data.frame(parse_tot[parse_tot$doc_id==2 & parse_tot$lang=="de",])
+plot_annotation(x, size = 3, mytitle="German")
+x <- as.data.frame(parse_tot[parse_tot$doc_id==2 & parse_tot$lang=="tr",])
+plot_annotation(x, size = 3, mytitle="Turkish")
+```
+
